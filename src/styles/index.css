@@ -1,4 +1,3 @@
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
@@ -8,11 +7,10 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   font-optical-sizing: auto;
-
   --bg: #09080d;
   --surface: #13101c;
-  --purple: #FF6B00;
-  --purple-light: #FF8C33;
+  --purple: #a855f7;
+  --purple-light: #c084fc;
   --muted: #9993a5;
   --border: rgba(255,255,255,0.10);
 }
@@ -104,7 +102,7 @@ button {
 
 .nav-cta:hover,
 .primary-btn:hover {
-  background: #E65C00;
+  background: #9333ea;
   transform: translateY(-3px);
 }
 
@@ -132,7 +130,7 @@ button {
   height: 650px;
   right: -150px;
   top: 20px;
-  background: radial-gradient(circle, rgba(255,107,0,.18), transparent 68%);
+  background: radial-gradient(circle, rgba(126,34,206,.18), transparent 68%);
   pointer-events: none;
 }
 
@@ -211,14 +209,14 @@ button {
 .visual-frame {
   aspect-ratio: 4 / 4.4;
   background:
-    radial-gradient(ellipse at 50% 40%, #8A3D0B 0%, #3D2114 36%, #100d19 75%);
-  border: 1px solid rgba(255,140,51,.35);
+    radial-gradient(ellipse at 50% 40%, #59258c 0%, #241437 36%, #100d19 75%);
+  border: 1px solid rgba(192,132,252,.35);
   border-radius: 8px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: 0 25px 100px rgba(255,107,0,.13);
+  box-shadow: 0 25px 100px rgba(126,34,206,.13);
 }
 
 .visual-top,
@@ -228,7 +226,7 @@ button {
   justify-content: space-between;
   font-size: 9px;
   letter-spacing: 2px;
-  color: #FFD2AD;
+  color: #d8c4ee;
 }
 
 .visual-center {
@@ -243,7 +241,7 @@ button {
 .visual-center > span {
   font-size: 9px;
   letter-spacing: 4px;
-  color: #FFD2AD;
+  color: #d8c4ee;
 }
 
 .visual-center h2 {
@@ -255,7 +253,7 @@ button {
 
 .outline-text {
   color: transparent;
-  -webkit-text-stroke: 1px #FFB77F;
+  -webkit-text-stroke: 1px #d8b4fe;
 }
 
 .visual-bottom {
@@ -267,8 +265,8 @@ button {
   right: -24px;
   bottom: 45px;
   padding: 15px 20px;
-  background: #29190F;
-  border: 1px solid rgba(255,140,51,.35);
+  background: #1d1429;
+  border: 1px solid rgba(192,132,252,.35);
   font-size: 10px;
   letter-spacing: 2px;
   border-radius: 5px;
@@ -292,7 +290,7 @@ button {
 }
 
 .intro-strip {
-  background: #21150F;
+  background: #171020;
   padding: 38px 8%;
   display: flex;
   justify-content: space-between;
@@ -333,7 +331,7 @@ button {
 .contact-section {
   padding: 110px 8%;
   text-align: center;
-  background: radial-gradient(ellipse at 50% 100%, #4A210D, #09080d 70%);
+  background: radial-gradient(ellipse at 50% 100%, #32144c, #09080d 70%);
 }
 
 .contact-section h2 {
