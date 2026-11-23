@@ -1,0 +1,12 @@
+
+CREATE DATABASE IF NOT EXISTS prime_productions;
+
+USE prime_productions;
+
+CREATE TABLE IF NOT EXISTS bookings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(120) NOT NULL,
+    contact VARCHAR(190) NOT NULL,
+    service VARCHAR(120) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
