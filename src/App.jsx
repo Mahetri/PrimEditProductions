@@ -1,5 +1,80 @@
 import { useEffect, useMemo, useState } from 'react'
+import Admin from './Admin'
 import './App.css'
+
+const API = 'http://localhost:5000'
+
+async function fetchPublicRows(resource) {
+  const response = await fetch(`${API}/api/public/${resource}`)
+  if (!response.ok) throw new Error(`Could not load ${resource}`)
+  const result = await response.json()
+  const rows = Array.isArray(result) ? result : (result.data || [])
+  return rows.map((row) => ({
+    ...row,
+    tags: parseJsonField(row.tags, []),
+    points: parseJsonField(row.points, []),
+    features: parseJsonField(row.features, []),
+  }))
+}
+
+function parseJsonField(value, fallback) {
+  if (Array.isArray(value)) return value
+  if (value && typeof value === 'object') return value
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) } catch { return fallback }
+  }
+  return fallback
+}
+
+function assetUrl(value) {
+  if (!value) return ''
+  return value.startsWith('http://') || value.startsWith('https://')
+    ? value
+    : `${API}${value.startsWith('/') ? '' : '/'}${value}`
+}
+
+function normalizeProject(row) {
+  return {
+    ...row,
+    icon: row.icon || '▶',
+    media_url: assetUrl(row.media_url),
+    thumbnail_url: assetUrl(row.thumbnail_url),
+  }
+}
+
+function normalizeThumbnail(row) {
+  return {
+    ...row,
+    before: row.before ?? row.before_text ?? 'BEFORE',
+    after: row.after ?? row.after_text ?? 'AFTER',
+    before_image: assetUrl(row.before_image),
+    after_image: assetUrl(row.after_image || row.image_url),
+    image_url: assetUrl(row.image_url),
+  }
+}
+
+function normalizeService(row) {
+  return {
+    ...row,
+    desc: row.desc ?? row.description ?? '',
+    time: row.time ?? row.turnaround ?? '',
+    tags: parseJsonField(row.tags, []),
+    points: parseJsonField(row.points, []),
+  }
+}
+
+function normalizeMilestone(row) {
+  return { ...row }
+}
+
+function normalizePlan(row) {
+  return {
+    ...row,
+    button: row.button ?? row.button_text ?? 'Get Started',
+    style: row.style ?? row.plan_style ?? 'standard',
+    features: parseJsonField(row.features, []),
+  }
+}
 
 const projects = [
   { niche: 'Real Estate', format: 'short', title: 'Luxury Property Reel', icon: '⌂' },
@@ -229,6 +304,7 @@ function ProjectArt({ niche }) {
   )
 }
 
+
 /* =========================
    BOOKING MODAL
 ========================= */
@@ -275,7 +351,7 @@ function BookingModal({ open, onClose }) {
     setStatus('sending')
 
     try {
-      const response = await fetch('http://localhost:5000/api/bookings', {
+      const response = await fetch(`${API}/api/bookings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -351,57 +427,60 @@ function BookingModal({ open, onClose }) {
               onChange={(event) => update('contact', event.target.value)}
             />
 
-            <label>Preferred Date</label>
-            <input
-              required
-              type="date"
-              min={new Date().toISOString().split('T')[0]}
-              value={form.date}
-              onChange={(event) => update('date', event.target.value)}
-            />
-
-            <label>Preferred Time</label>
-            <input
-              required
-              type="time"
-              value={form.time}
-              onChange={(event) => update('time', event.target.value)}
-            />
-
-            <label>What do you need?</label>
+            <label>Service Required</label>
             <select
               value={form.service}
               onChange={(event) => update('service', event.target.value)}
             >
               <option>Real estate videos</option>
-              <option>Gaming videos</option>
-              <option>Talking heads for business</option>
-              <option>Clipping</option>
-              <option>Vlogs</option>
-              <option>Podcast</option>
+              <option>Short-form editing</option>
+              <option>Long-form editing</option>
               <option>Thumbnails</option>
-              <option>Something else</option>
+              <option>Gaming videos</option>
+              <option>Podcast editing</option>
+              <option>Other</option>
             </select>
 
-            <label>Anything you want to discuss? (Optional)</label>
+            <div className="form-row">
+              <div>
+                <label>Preferred Date</label>
+                <input
+                  type="date"
+                  value={form.date}
+                  onChange={(event) => update('date', event.target.value)}
+                />
+              </div>
+
+              <div>
+                <label>Preferred Time</label>
+                <input
+                  type="time"
+                  value={form.time}
+                  onChange={(event) => update('time', event.target.value)}
+                />
+              </div>
+            </div>
+
+            <label>Project Details</label>
             <textarea
               rows="3"
               value={form.note}
-              placeholder="Tell us a little about your project"
+              placeholder="Tell us a little about your project..."
               onChange={(event) => update('note', event.target.value)}
             />
 
             {status === 'error' && (
-              <p className="error-text">
-                Booking request could not be sent. Check your backend connection.
+              <p className="form-error">
+                Something went wrong. Please try again.
               </p>
             )}
 
             <button
-              className="btn btn-fill send-btn"
+              type="submit"
+              className="btn btn-primary"
               disabled={status === 'sending'}
             >
-              {status === 'sending' ? 'Sending...' : 'Request a Call →'}
+              {status === 'sending' ? 'Sending...' : 'Send Booking Request'}
             </button>
           </form>
         )}
@@ -414,7 +493,7 @@ function BookingModal({ open, onClose }) {
    PLAN CALCULATOR
 ========================= */
 
-function CalculatorModal({ open, onClose, onBookCall }) {
+function CalculatorModal({ open, onClose, onBookCall, settings }) {
   const [step, setStep] = useState(0)
   const [answers, setAnswers] = useState({})
   const [currency, setCurrency] = useState('USD')
@@ -422,7 +501,19 @@ function CalculatorModal({ open, onClose, onBookCall }) {
   const [thumbnailsCount, setThumbnailsCount] = useState(0)
   const [showResult, setShowResult] = useState(false)
 
-  const rate = 85
+  const liveSteps =
+    Array.isArray(settings?.steps) && settings.steps.length >= 5
+      ? settings.steps
+      : calculatorSteps
+
+  const liveVolumes =
+    Array.isArray(settings?.volumeOptions) && settings.volumeOptions.length
+      ? settings.volumeOptions
+      : volumeOptions
+
+  const rate = Number(settings?.currencyRate) || 85
+  const shortAddonPrice = Number(settings?.shortAddonPrice) || 50
+  const thumbnailAddonPrice = Number(settings?.thumbnailAddonPrice) || 30
 
   useEffect(() => {
     if (!open) return
@@ -449,12 +540,12 @@ function CalculatorModal({ open, onClose, onBookCall }) {
 
   if (!open) return null
 
-  const selectedStage = calculatorSteps[0].options[answers.stage]
-  const selectedType = calculatorSteps[1].options[answers.type]
-  const selectedLength = calculatorSteps[2].options[answers.length]
-  const selectedRaw = calculatorSteps[3].options[answers.raw]
-  const selectedStyle = calculatorSteps[4].options[answers.style]
-  const selectedVolume = volumeOptions[answers.volume]
+  const selectedStage = liveSteps[0]?.options?.[answers.stage]
+  const selectedType = liveSteps[1]?.options?.[answers.type]
+  const selectedLength = liveSteps[2]?.options?.[answers.length]
+  const selectedRaw = liveSteps[3]?.options?.[answers.raw]
+  const selectedStyle = liveSteps[4]?.options?.[answers.style]
+  const selectedVolume = liveVolumes[answers.volume]
 
   const basePrice = selectedStage?.[2] || 400
 
@@ -470,7 +561,11 @@ function CalculatorModal({ open, onClose, onBookCall }) {
   const discount = selectedVolume?.discount || 0
 
   const editingTotal = unitPrice * quantity * (1 - discount)
-  const addOnTotal = shorts * 50 + thumbnailsCount * quantity * 30
+
+  const addOnTotal =
+    shorts * shortAddonPrice +
+    thumbnailsCount * quantity * thumbnailAddonPrice
+
   const total = editingTotal + addOnTotal
 
   function money(value) {
@@ -505,7 +600,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
     }
   }
 
-  const currentStep = calculatorSteps[step]
+  const currentStep = liveSteps[step]
   const stepKey = currentStep?.key
 
   const canContinue =
@@ -551,7 +646,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                       ? 'MONTHLY VOLUME'
                       : step === 6
                         ? 'ADD-ONS'
-                        : currentStep.title.toUpperCase()
+                        : currentStep?.title?.toUpperCase()
                   }
                 </span>
 
@@ -569,8 +664,8 @@ function CalculatorModal({ open, onClose, onBookCall }) {
 
             {step < 5 ? (
               <div className="plan-step">
-                <h2>{currentStep.heading}</h2>
-                <p>{currentStep.description}</p>
+                <h2>{currentStep?.heading}</h2>
+                <p>{currentStep?.description}</p>
 
                 <div
                   className={`plan-options ${
@@ -579,7 +674,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                       : ''
                   }`}
                 >
-                  {currentStep.options.map((option, index) => (
+                  {currentStep?.options?.map((option, index) => (
                     <button
                       type="button"
                       key={option[0]}
@@ -613,7 +708,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                 </p>
 
                 <div className="plan-options two-column">
-                  {volumeOptions.map((option, index) => {
+                  {liveVolumes.map((option, index) => {
                     const subtotal = unitPrice * option.count
                     const discounted = subtotal * (1 - option.discount)
 
@@ -660,7 +755,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                   <h3>Short-Form Content</h3>
 
                   <p>
-                    Repurpose your content into engaging shorts · $50 each
+                    Repurpose your content into engaging shorts · {money(shortAddonPrice)} each
                   </p>
 
                   <div className="plan-addon-options">
@@ -672,9 +767,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                         onClick={() => setShorts(count)}
                       >
                         <b>{count}</b>
-                        <small>
-                          {count === 1 ? 'short' : 'shorts'}/month
-                        </small>
+                        <small>shorts/month</small>
                       </button>
                     ))}
                   </div>
@@ -683,7 +776,9 @@ function CalculatorModal({ open, onClose, onBookCall }) {
                 <div className="plan-addon-group">
                   <h3>Custom Thumbnails</h3>
 
-                  <p>Professional thumbnails · $30 each</p>
+                  <p>
+                    Professional thumbnails · {money(thumbnailAddonPrice)} each
+                  </p>
 
                   <div className="plan-addon-options">
                     {[0, 1, 2, 3].map((count) => (
@@ -750,6 +845,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
 
             <div className="currency-switch">
               <button
+                type="button"
                 className={currency === 'USD' ? 'active' : ''}
                 onClick={() => setCurrency('USD')}
               >
@@ -757,6 +853,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
               </button>
 
               <button
+                type="button"
                 className={currency === 'INR' ? 'active' : ''}
                 onClick={() => setCurrency('INR')}
               >
@@ -782,14 +879,14 @@ function CalculatorModal({ open, onClose, onBookCall }) {
 
               <div>
                 <span>Short-form add-ons ({shorts})</span>
-                <b>{money(shorts * 50)}</b>
+                <b>{money(shorts * shortAddonPrice)}</b>
               </div>
 
               <div>
                 <span>
                   Thumbnail add-ons ({thumbnailsCount * quantity})
                 </span>
-                <b>{money(thumbnailsCount * quantity * 30)}</b>
+                <b>{money(thumbnailsCount * quantity * thumbnailAddonPrice)}</b>
               </div>
 
               <div className="plan-total">
@@ -841,6 +938,7 @@ function CalculatorModal({ open, onClose, onBookCall }) {
     </div>
   )
 }
+
 
 /* =========================
    HEADER
@@ -967,6 +1065,7 @@ function Header({ theme, toggleTheme, navigate, openBooking }) {
 ========================= */
 
 function WorkPage({
+  projects = [],
   navigate,
   openBooking,
   theme,
@@ -1043,7 +1142,27 @@ function WorkPage({
               key={`${project.title}-${index}`}
             >
               <span className="tile-niche">{project.niche}</span>
-              <div className="tile-icon">{project.icon}</div>
+
+              {project.media_url && project.media_type === 'video' ? (
+                <video
+                  className="tile-media"
+                  src={project.media_url}
+                  poster={project.thumbnail_url || undefined}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                />
+              ) : project.thumbnail_url || project.media_url ? (
+                <img
+                  className="tile-media"
+                  src={project.thumbnail_url || project.media_url}
+                  alt={project.title}
+                />
+              ) : (
+                <div className="tile-icon">{project.icon}</div>
+              )}
+
               <span className="tile-title">{project.title}</span>
               <span className="tile-play">▶</span>
             </article>
@@ -1085,6 +1204,7 @@ function WorkPage({
 ========================= */
 
 function AboutPage({
+  milestones = [],
   navigate,
   openBooking,
   theme,
@@ -1114,7 +1234,7 @@ function AboutPage({
         </p>
 
         <div className="about-timeline">
-          {aboutMilestones.map((item, index) => (
+          {milestones.map((item, index) => (
             <article
               className={`about-milestone ${
                 index % 2 ? 'right' : 'left'
@@ -1165,47 +1285,34 @@ function AboutPage({
    PRICING SECTION
 ========================= */
 
-function PricingSection({ openCalculator, openBooking }) {
+function PricingSection({ plans: savedPlans = [], openCalculator, openBooking }) {
   const [currency, setCurrency] = useState('INR')
 
-  const plans = [
+  const fallbackPlans = [
     {
       name: 'Per Video',
       description: 'Pay as you go, one video at a time.',
-      features: [
-        'One edited video',
-        'Revisions included',
-        'Delivery timeline discussed',
-        'Short-form or long-form',
-      ],
+      features: ['One edited video', 'Revisions included', 'Delivery timeline discussed', 'Short-form or long-form'],
       button: 'Get Started',
       style: 'standard',
     },
     {
       name: 'Pro Plan',
       description: 'For creators and brands posting regularly.',
-      features: [
-        'Monthly video package',
-        'Priority delivery',
-        'Thumbnails can be included',
-        'Dedicated editing workflow',
-      ],
+      features: ['Monthly video package', 'Priority delivery', 'Thumbnails can be included', 'Dedicated editing workflow'],
       button: 'Choose Pro',
       style: 'hot',
     },
     {
       name: 'Talented 1% Plan',
       description: 'For teams that want the best of everything.',
-      features: [
-        'Everything in Pro',
-        'Priority support',
-        'Content planning discussion',
-        'Shoots in India can be discussed',
-      ],
+      features: ['Everything in Pro', 'Priority support', 'Content planning discussion', 'Shoots in India can be discussed'],
       button: 'Choose Talented 1%',
       style: 'top',
     },
   ]
+
+  const plans = savedPlans.length ? savedPlans : fallbackPlans
 
   return (
     <section className="wrap section pricing-section" id="pricing">
@@ -1242,23 +1349,29 @@ function PricingSection({ openCalculator, openBooking }) {
             key={plan.name}
           >
             {plan.style === 'hot' && (
-              <span className="pricing-badge">
-                MOST POPULAR
-              </span>
+              <span className="pricing-badge">MOST POPULAR</span>
             )}
 
             {plan.style === 'top' && (
-              <span className="pricing-badge">
-                TOP 1%
-              </span>
+              <span className="pricing-badge">TOP 1%</span>
             )}
 
             <h3>{plan.name}</h3>
             <p>{plan.description}</p>
 
             <div className="pricing-amount">
-              <strong>Custom</strong>
-              <span>{currency} · Quote</span>
+              <strong>
+                {currency === 'INR' && plan.price_inr
+                  ? `₹${Number(plan.price_inr).toLocaleString('en-IN')}`
+                  : currency === 'USD' && plan.price_usd
+                    ? `$${Number(plan.price_usd).toLocaleString('en-US')}`
+                    : 'Custom'}
+              </strong>
+              <span>
+                {plan.price_inr || plan.price_usd
+                  ? `${currency} · Per plan`
+                  : `${currency} · Quote`}
+              </span>
             </div>
 
             <ul>
@@ -1303,7 +1416,7 @@ function PricingSection({ openCalculator, openBooking }) {
    TESTIMONIALS SECTION
 ========================= */
 
-function TestimonialsSection() {
+function TestimonialsSection({ testimonials = [] }) {
   return (
     <section className="wrap section testimonials-section">
       <div className="eyebrow">TESTIMONIALS</div>
@@ -1313,19 +1426,36 @@ function TestimonialsSection() {
       </h2>
 
       <p className="section-sub">
-        Client feedback and project stories will be featured here.
+        What clients say about working with Prime Productions.
       </p>
 
-      <div className="testimonial-placeholder">
-        <span className="testimonial-quote">“</span>
+      {testimonials.length ? (
+        <div className="services-grid">
+          {testimonials.map((item, index) => (
+            <article
+              className="service-card"
+              key={item.id || `${item.client_name}-${index}`}
+            >
+              <div className="service-icon">
+                {'★'.repeat(Math.max(1, Math.min(5, Number(item.rating) || 5)))}
+              </div>
 
-        <h3>Good work speaks through the results.</h3>
+              <p>{item.message}</p>
+              <h3>{item.client_name}</h3>
 
-        <p>
-          Client testimonials will be added here as projects
-          and feedback are shared.
-        </p>
-      </div>
+              {item.client_role && <span>{item.client_role}</span>}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="testimonial-placeholder">
+          <span className="testimonial-quote">“</span>
+          <h3>Good work speaks through the results.</h3>
+          <p>
+            Client testimonials will appear here when published from the admin panel.
+          </p>
+        </div>
+      )}
     </section>
   )
 }
@@ -1335,6 +1465,100 @@ function TestimonialsSection() {
 ========================= */
 
 function App() {
+  const [liveProjects, setLiveProjects] = useState(projects)
+  const [liveThumbnails, setLiveThumbnails] = useState(thumbnails)
+  const [liveServices, setLiveServices] = useState(services)
+  const [liveMilestones, setLiveMilestones] = useState(aboutMilestones)
+  const [livePricing, setLivePricing] = useState([])
+  const [liveTestimonials, setLiveTestimonials] = useState([])
+  const [calculatorSettings, setCalculatorSettings] = useState(null)
+
+  useEffect(() => {
+    let active = true
+
+    const load = async () => {
+      const jobs = [
+        ['projects', fetchPublicRows('projects')],
+        ['thumbnails', fetchPublicRows('thumbnails')],
+        ['services', fetchPublicRows('services')],
+        ['milestones', fetchPublicRows('milestones')],
+        ['pricing', fetchPublicRows('pricing')],
+        ['testimonials', fetchPublicRows('testimonials')],
+      ]
+
+      const results = await Promise.allSettled(
+        jobs.map(([, promise]) => promise)
+      )
+
+      if (!active) return
+
+      results.forEach((result, index) => {
+        if (result.status !== 'fulfilled' || !result.value.length) return
+
+        const key = jobs[index][0]
+
+        if (key === 'projects') {
+          setLiveProjects(result.value.map(normalizeProject))
+        }
+
+        if (key === 'thumbnails') {
+          setLiveThumbnails(result.value.map(normalizeThumbnail))
+        }
+
+        if (key === 'services') {
+          setLiveServices(result.value.map(normalizeService))
+        }
+
+        if (key === 'milestones') {
+          setLiveMilestones(result.value.map(normalizeMilestone))
+        }
+
+        if (key === 'pricing') {
+          setLivePricing(result.value.map(normalizePlan))
+        }
+
+        if (key === 'testimonials') {
+          setLiveTestimonials(result.value)
+        }
+      })
+
+      try {
+        const response = await fetch(
+          `${API}/api/public/site-content/calculator_settings`
+        )
+
+        if (!response.ok) return
+
+        const result = await response.json()
+        const content =
+          result.content ??
+          result.data?.content ??
+          result.data ??
+          result
+
+        if (active && content && typeof content === 'object') {
+          setCalculatorSettings(content)
+        }
+      } catch (error) {
+        console.warn(
+          'Calculator settings could not be loaded; using defaults.',
+          error
+        )
+      }
+    }
+
+    load().catch((error) => {
+      console.warn(
+        'Some public content could not be loaded; using saved fallback content.',
+        error
+      )
+    })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
   const [theme, setTheme] = useState(() => {
     try {
       return localStorage.getItem('prime-theme') || 'dark'
@@ -1346,11 +1570,13 @@ function App() {
   const [page, setPage] = useState(() => {
     const path = window.location.pathname
 
-    return path === '/work'
-      ? 'work'
-      : path === '/about'
-        ? 'about'
-        : 'home'
+    return path === '/admin'
+      ? 'admin'
+      : path === '/work'
+        ? 'work'
+        : path === '/about'
+          ? 'about'
+          : 'home'
   })
 
   const [bookingOpen, setBookingOpen] = useState(false)
@@ -1368,11 +1594,13 @@ function App() {
 
   function navigate(path) {
     const nextPage =
-      path === '/work'
-        ? 'work'
-        : path === '/about'
-          ? 'about'
-          : 'home'
+      path === '/admin'
+        ? 'admin'
+        : path === '/work'
+          ? 'work'
+          : path === '/about'
+            ? 'about'
+            : 'home'
 
     window.history.pushState({}, '', path)
 
@@ -1389,11 +1617,13 @@ function App() {
       const path = window.location.pathname
 
       setPage(
-        path === '/work'
-          ? 'work'
-          : path === '/about'
-            ? 'about'
-            : 'home'
+        path === '/admin'
+          ? 'admin'
+          : path === '/work'
+            ? 'work'
+            : path === '/about'
+              ? 'about'
+              : 'home'
       )
     }
 
@@ -1482,23 +1712,23 @@ function App() {
 
   const visibleProjects = useMemo(
     () =>
-      projects.filter(
+      liveProjects.filter(
         (project) =>
           project.format === format &&
           (niche === 'All' || project.niche === niche)
       ),
-    [format, niche]
+    [liveProjects, format, niche]
   )
 
   const previewProjects = visibleProjects.slice(0, 4)
 
   const visibleThumbs = useMemo(
     () =>
-      thumbnails.filter(
+      liveThumbnails.filter(
         (thumb) =>
           thumbNiche === 'All' || thumb.niche === thumbNiche
       ),
-    [thumbNiche]
+    [liveThumbnails, thumbNiche]
   )
 
   const currentThumb = visibleThumbs[thumbIndex]
@@ -1524,11 +1754,17 @@ function App() {
   const openBooking = () => setBookingOpen(true)
   const openCalculator = () => setCalculatorOpen(true)
 
+  /* ADMIN PAGE */
+  if (page === 'admin') {
+    return <Admin onExit={() => navigate('/')} />
+  }
+
   /* WORK PAGE */
   if (page === 'work') {
     return (
       <>
         <WorkPage
+          projects={liveProjects}
           navigate={navigate}
           openBooking={openBooking}
           theme={theme}
@@ -1548,6 +1784,7 @@ function App() {
     return (
       <>
         <AboutPage
+          milestones={liveMilestones}
           navigate={navigate}
           openBooking={openBooking}
           theme={theme}
@@ -1629,8 +1866,7 @@ function App() {
             <span>MAKE IT MATTER.</span>
           </div>
         </section>
-
-        {/* NICHE CARDS */}
+                {/* NICHE CARDS */}
         <section className="wrap niche-cards" id="niches">
           {['Real Estate', 'Gaming', 'Talking Heads', 'Vlogs'].map(
             (item, index) => (
@@ -1750,9 +1986,25 @@ function App() {
                 {project.niche}
               </span>
 
-              <div className="tile-icon">
-                {project.icon}
-              </div>
+              {project.media_url && project.media_type === 'video' ? (
+                <video
+                  className="tile-media"
+                  src={project.media_url}
+                  poster={project.thumbnail_url || undefined}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                />
+              ) : project.thumbnail_url || project.media_url ? (
+                <img
+                  className="tile-media"
+                  src={project.thumbnail_url || project.media_url}
+                  alt={project.title}
+                />
+              ) : (
+                <div className="tile-icon">{project.icon}</div>
+              )}
 
               <span className="tile-title">
                 {project.title}
@@ -1828,12 +2080,34 @@ function App() {
               '--compare': `${compare}%`,
             }}
           >
-            <div className="thumb-art before">
+            <div
+              className="thumb-art before"
+              style={
+                currentThumb.before_image
+                  ? {
+                      backgroundImage: `url(${currentThumb.before_image})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }
+                  : undefined
+              }
+            >
               <div className="thumb-shape" />
               <strong>{currentThumb.before}</strong>
             </div>
 
-            <div className="thumb-art after">
+            <div
+              className="thumb-art after"
+              style={
+                currentThumb.after_image
+                  ? {
+                      backgroundImage: `url(${currentThumb.after_image})`,
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }
+                  : undefined
+              }
+            >
               <div className="thumb-shape" />
               <strong>{currentThumb.after}</strong>
               <small>PRIME EDIT</small>
@@ -1935,7 +2209,7 @@ function App() {
         </p>
 
         <div className="services-grid">
-          {services.map((service, index) => (
+          {liveServices.map((service, index) => (
             <article
               className="service-card reveal"
               key={service.title}
@@ -1991,10 +2265,11 @@ function App() {
       </section>
 
       {/* TESTIMONIALS */}
-      <TestimonialsSection />
+      <TestimonialsSection testimonials={liveTestimonials} />
 
       {/* PRICING */}
       <PricingSection
+        plans={livePricing}
         openCalculator={openCalculator}
         openBooking={openBooking}
       />
@@ -2067,6 +2342,7 @@ function App() {
         open={calculatorOpen}
         onClose={() => setCalculatorOpen(false)}
         onBookCall={openBooking}
+        settings={calculatorSettings}
       />
     </div>
   )
